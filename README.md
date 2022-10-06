@@ -34,11 +34,11 @@ mvn clean package
 * Update the `config.xml` in MID Server with below parameters and restart the MID Server.
 
   ```txt
-   <parameter name="ext.cred.cyberark.safe_folder" value="<safe_folder>"/> 
-   <parameter name="ext.cred.cyberark.safe_name" value="<safe_name>"/> 
-   <parameter name="ext.cred.cyberark.app_id" value="ServiceNow_MID_Server"/> 
-   <parameter name="ext.cred.cyberark.safe_timeout" value="10"/> 
-   <parameter name="ext.cred.cyberark.include_basic_auth_domain" value="<true|false>"/>
+   <parameter name="mid.ext.cred.cyberark.safe_folder" value="<safe_folder>"/> 
+   <parameter name="mid.ext.cred.cyberark.safe_name" value="<safe_name>"/> 
+   <parameter name="mid.ext.cred.cyberark.app_id" value="ServiceNow_MID_Server"/> 
+   <parameter name="mid.ext.cred.cyberark.safe_timeout" value="10"/> 
+   <parameter name="mid.ext.cred.cyberark.include_basic_auth_domain" value="<true|false>"/>
   ```
 
 * Create Credential in the instance with "External credential store" flag activated.

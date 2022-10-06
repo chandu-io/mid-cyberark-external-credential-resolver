@@ -4,6 +4,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.regex.Pattern;
 
+import com.service_now.mid.services.Config;
 import com.snc.automation_common.integration.creds.IExternalCredential;
 import com.snc.core_automation_common.logging.Logger;
 import com.snc.core_automation_common.logging.LoggerFactory;
@@ -20,36 +21,58 @@ public class CredentialResolver implements IExternalCredential {
 
 	// Required parameters that must be in the config file in order to use CyberArk.
 	// Parameters used to access the vault / credentials
-	public static final String SAFE_FOLDER_PROPERTY = "ext.cred.cyberark.safe_folder";
-	public static final String SAFE_NAME_PROPERTY = "ext.cred.cyberark.safe_name";
-	public static final String SAFE_USER_APP_ID_PROPERTY = "ext.cred.cyberark.app_id";
-	public static final String SAFE_TIMEOUT_PROPERTY = "ext.cred.cyberark.safe_timeout";
-	public static final String CYBERARK_INCLUDE_DOMAIN_PROPERTY = "ext.cred.cyberark.include_basic_auth_domain";
+	public static final String SAFE_FOLDER_PROPERTY = "mid.ext.cred.cyberark.safe_folder";
+	public static final String SAFE_NAME_PROPERTY = "mid.ext.cred.cyberark.safe_name";
+	public static final String SAFE_USER_APP_ID_PROPERTY = "mid.ext.cred.cyberark.app_id";
+	public static final String SAFE_TIMEOUT_PROPERTY = "mid.ext.cred.cyberark.safe_timeout";
+	public static final String CYBERARK_INCLUDE_DOMAIN_PROPERTY = "mid.ext.cred.cyberark.include_basic_auth_domain";
 
 	private static final String DEFAULT_SAFE_APP_ID = "ServiceNow_MID_Server";
 	private static final String DEFAULT_SAFE_TIMEOUT = "10";
 	private static final String DEF_SAFE_CREDID_SPLIT = ":";
 
-	// Load below parameters from MID config parameters.
+	// ===  Load below parameters from MID config parameters.  === //
 
 	// The Safe folder to use as specified in the MID config.xml file (must match folder name in CyberArk)
-	private String safeFolder = "";
+	private String safeFolder;
 
 	// The Safe name to use as specified in the MID config.xml file (must match safe name in CyberArk)
-	private String safeName = "";
+	private String safeName;
 
 	// The App-ID used when connecting to CyberArk (can be overridden in the config.xml file)
-	private String safeAppID = "";
+	private String safeAppID;
 
 	// The vault (server) response timeout in seconds to use as specified in the MID config.xml file
-	private String safeTimeout = "";
+	private String safeTimeout;
 
-	private String includeDomain = "";
+	// === === === === === === === === === === === === === === === //
+
+	private String includeDomain;
 
 	// Logger object to log messages in agent.log
 	private static final Logger fLogger = LoggerFactory.getLogger(CredentialResolver.class);
 
 	public CredentialResolver() {
+		this.safeAppID = Config.get().getProperty(SAFE_USER_APP_ID_PROPERTY);
+		if (isNullOrEmpty(this.safeAppID)) {
+			this.safeAppID = "ServiceNow_MID_Server";
+		}
+		this.safeTimeout = Config.get().getProperty(SAFE_TIMEOUT_PROPERTY);
+		if (isNullOrEmpty(this.safeTimeout)) {
+			this.safeTimeout = "10";
+		}
+		this.includeDomain = Config.get().getProperty(CYBERARK_INCLUDE_DOMAIN_PROPERTY);
+		if (isNullOrEmpty(this.includeDomain)) {
+			this.includeDomain = "false";
+		}
+		this.safeFolder = Config.get().getProperty(SAFE_FOLDER_PROPERTY);
+		if (isNullOrEmpty(this.safeFolder)) {
+			throw new RuntimeException("[Vault] INFO - CyberArkCredentialResolver safeFolder not set!");
+		}
+		this.safeName = Config.get().getProperty(SAFE_NAME_PROPERTY);
+		if (isNullOrEmpty(this.safeName)) {
+			throw new RuntimeException("[Vault] INFO - CyberArkCredentialResolver safeSafeName not set!");
+		}
 	}
 
 	/**
@@ -63,14 +86,14 @@ public class CredentialResolver implements IExternalCredential {
 
 
 	/**
-	 * Config method with pre-loaded config parameters from config.xml.
+	 * Config method with preloaded config parameters from config.xml.
 	 *
-	 * @param configMap - contains config parameters with prefix "ext.cred" only.
+	 * @param configMap - contains config parameters with prefix "mid.ext.cred" only.
 	 */
 	@Override
 	public void config(Map<String, String> configMap) {
-		//Note: To load config parameters from MID config.xml if not available in configMap.
-		//propValue = Config.get().getProperty("<Parameter Name>")
+		// Note: To load config parameters from MID config.xml if not available in configMap.
+		// propValue = Config.get().getProperty("<Parameter Name>")
 
 		safeAppID = configMap.get(SAFE_USER_APP_ID_PROPERTY);
 		if (isNullOrEmpty(safeAppID)) {
@@ -163,10 +186,10 @@ public class CredentialResolver implements IExternalCredential {
 
 			// Grab the username / auth key from the returned object
 			username = psdkPassword.getUserName();
-			password = psdkPassword.getContent();  // password, private key, etc.
+			password = psdkPassword.getContent(); // password, private key, etc.
 
 			switch (credType) {
-				// for below listed credential type , just retrieve user name and password
+				// for below listed credential type , just retrieve username and password
 				case "windows":
 				case "ssh_password": // Type SSH
 				case "vmware":
@@ -174,9 +197,9 @@ public class CredentialResolver implements IExternalCredential {
 				case "jms":
 				case "basic":
 					username = psdkPassword.getUserName();
-					password = psdkPassword.getContent();  // password, private key, etc.
+					password = psdkPassword.getContent(); // password, private key, etc.
 
-					//Optional: for windows/vmware, include domain name
+					// Optional: for windows/vmware, include domain name
 					if (credType.equals("windows") || credType.equals("vmware")) {
 						// add domain in username if not already exists
 						if (username.indexOf('\\') < 0 && "true".equalsIgnoreCase(includeDomain)) {
@@ -197,7 +220,7 @@ public class CredentialResolver implements IExternalCredential {
 						}
 					}
 					break;
-				// for below listed credential type , retrieve user name, password, ssh_passphrase, ssh_private_key
+				// for below listed credential type , retrieve username, password, ssh_passphrase, ssh_private_key
 				case "ssh_private_key":
 				case "sn_cfg_ansible":
 				case "sn_disco_certmgmt_certificate_ca":
@@ -206,17 +229,16 @@ public class CredentialResolver implements IExternalCredential {
 				case "api_key":
 					// Read operation
 					username = psdkPassword.getUserName();
-					private_key = psdkPassword.getContent();  // password, private key, etc.
+					private_key = psdkPassword.getContent(); // password, private key, etc.
 
 					break;
 				case "aws":
-					;
 				case "ibm":
-					; // softlayer_user, softlayer_key, bluemix_key
+					// softlayer_user, softlayer_key, bluemix_key
 				case "azure":
-					; // tenant_id, client_id, auth_method, secret_key
+					// tenant_id, client_id, auth_method, secret_key
 				case "gcp":
-					; // email , secret_key
+					// email , secret_key
 				default:
 					fLogger.error("[Vault] INFO - CredentialResolver - invalid credential type found.");
 					break;
@@ -226,7 +248,7 @@ public class CredentialResolver implements IExternalCredential {
 			fLogger.error("### Unable to find credential from CyberArk server.", e);
 		}
 		// the resolved credential is returned in a HashMap...
-		Map<String, String> result = new HashMap<String, String>();
+		Map<String, String> result = new HashMap<>();
 		result.put(VAL_USER, username);
 		if (isNullOrEmpty(private_key)) {
 			result.put(VAL_PSWD, password);
@@ -236,7 +258,12 @@ public class CredentialResolver implements IExternalCredential {
 		return result;
 	}
 
-	public PSDKPassword getCred(String appId, String credId, String safeName, String safeFolder, String policyId, String safeTimeout) throws PSDKException {
+	public PSDKPassword getCred(String appId,
+	                            String credId,
+	                            String safeName,
+	                            String safeFolder,
+	                            String policyId,
+	                            String safeTimeout) throws PSDKException {
 		try {
 			PSDKPasswordRequest fRequest = new PSDKPasswordRequest();
 			// Format the query for CyberArk
@@ -275,13 +302,13 @@ public class CredentialResolver implements IExternalCredential {
 	// TODO: Remove this before moving to production
 	public static void main(String[] args) {
 		CredentialResolver credResolver = new CredentialResolver();
-		//credResolver.loadProps();
+		// credResolver.loadProps();
 		credResolver.safeFolder = "root";
-		credResolver.safeName = "testsafe";
+		credResolver.safeName = "test-safe";
 
 		Map<String, String> map = new HashMap<>();
-		map.put(ARG_ID, "test-win-credentials");
-		map.put(ARG_TYPE, "windows");
+		map.put(ARG_ID, "azure-cert-test-credentials");
+		map.put(ARG_TYPE, "azure");
 
 		Map<String, String> result = credResolver.resolve(map);
 		fLogger.info(result.toString());
