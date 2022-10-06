@@ -1,5 +1,13 @@
 package com.snc.discovery;
 
+import static com.service_now.mid.services.CredentialResolverProxy.ATTR_NAME_AZURE_AUTH_METHOD;
+import static com.service_now.mid.util.CloudServiceAccountCredentialUtil.AWS_SECRET_KEY__ATTR_NAME;
+import static com.service_now.mid.util.CloudServiceAccountCredentialUtil.AZURE_CERTIFICATE_ALIAS_ATTR_NAME;
+import static com.service_now.mid.util.CloudServiceAccountCredentialUtil.AZURE_CERTIFICATE_ATTR_NAME;
+import static com.service_now.mid.util.CloudServiceAccountCredentialUtil.AZURE_CERTIFICATE_PASSPHRASE_ATTR_NAME;
+import static com.service_now.mid.util.CloudServiceAccountCredentialUtil.AZURE_CLIENT_ID_ATTR_NAME;
+import static com.service_now.mid.util.CloudServiceAccountCredentialUtil.AZURE_TENANT_ID_ATTR_NAME;
+
 import java.util.HashMap;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -8,11 +16,6 @@ import com.service_now.mid.services.Config;
 import com.snc.automation_common.integration.creds.IExternalCredential;
 import com.snc.core_automation_common.logging.Logger;
 import com.snc.core_automation_common.logging.LoggerFactory;
-import javapasswordsdk.PSDKPassword;
-import javapasswordsdk.PSDKPasswordRequest;
-import javapasswordsdk.PasswordQueryFormat;
-import javapasswordsdk.PasswordSDK;
-import javapasswordsdk.exceptions.PSDKException;
 
 /**
  * Basic implementation of a CredentialResolver that uses the JavaPasswordSDK API to connect to CyberArk vault.
@@ -67,11 +70,11 @@ public class CredentialResolver implements IExternalCredential {
 		}
 		this.safeFolder = Config.get().getProperty(SAFE_FOLDER_PROPERTY);
 		if (isNullOrEmpty(this.safeFolder)) {
-			throw new RuntimeException("[Vault] INFO - CyberArkCredentialResolver safeFolder not set!");
+			fLogger.error("[Vault] INFO - CyberArkCredentialResolver safeFolder not set!");
 		}
 		this.safeName = Config.get().getProperty(SAFE_NAME_PROPERTY);
 		if (isNullOrEmpty(this.safeName)) {
-			throw new RuntimeException("[Vault] INFO - CyberArkCredentialResolver safeSafeName not set!");
+			fLogger.error("[Vault] INFO - CyberArkCredentialResolver safeSafeName not set!");
 		}
 	}
 
@@ -145,15 +148,14 @@ public class CredentialResolver implements IExternalCredential {
 		String credId = args.get(ARG_ID);
 		String credType = args.get(ARG_TYPE);
 
-		String username = "";
-		String password = "";
-		String private_key = "";
-
 		if (isNullOrEmpty(credId) || isNullOrEmpty(credType)) {
 			throw new RuntimeException("Invalid credential Id or type found.");
 		}
 
 		String policyId = "";
+
+		// the resolved credential is returned in a HashMap...
+		Map<String, String> result = new HashMap<>();
 
 		try {
 			// get safeName and policyId from credId if exists.
@@ -181,109 +183,33 @@ public class CredentialResolver implements IExternalCredential {
 			fLogger.info("credType: " + credType);
 			fLogger.info("policyId: " + policyId);
 
-			// Connect to vault and retrieve credential
-			PSDKPassword psdkPassword = getCred(safeAppID, credId, safeName, safeFolder, policyId, safeTimeout);
-
-			// Grab the username / auth key from the returned object
-			username = psdkPassword.getUserName();
-			password = psdkPassword.getContent(); // password, private key, etc.
-
-			switch (credType) {
-				// for below listed credential type , just retrieve username and password
-				case "windows":
-				case "ssh_password": // Type SSH
-				case "vmware":
-				case "jdbc":
-				case "jms":
-				case "basic":
-					username = psdkPassword.getUserName();
-					password = psdkPassword.getContent(); // password, private key, etc.
-
-					// Optional: for windows/vmware, include domain name
-					if (credType.equals("windows") || credType.equals("vmware")) {
-						// add domain in username if not already exists
-						if (username.indexOf('\\') < 0 && "true".equalsIgnoreCase(includeDomain)) {
-							String domainName = "";
-							// domain is the string in the address field.
-							String address = psdkPassword.getAddress();
-							fLogger.debug("Windows domain name property not found, using address : " + address);
-							if (!isNullOrEmpty(address)) {
-								domainName = address;
-							}
-
-							if (!isNullOrEmpty(domainName)) {
-								username = domainName + "\\" + username;
-							} else {
-								// this is required for windows
-								username = ".\\" + username;
-							}
-						}
-					}
-					break;
-				// for below listed credential type , retrieve username, password, ssh_passphrase, ssh_private_key
-				case "ssh_private_key":
-				case "sn_cfg_ansible":
-				case "sn_disco_certmgmt_certificate_ca":
-				case "cfg_chef_credentials":
-				case "infoblox":
-				case "api_key":
-					// Read operation
-					username = psdkPassword.getUserName();
-					private_key = psdkPassword.getContent(); // password, private key, etc.
-
-					break;
-				case "aws":
-				case "ibm":
-					// softlayer_user, softlayer_key, bluemix_key
-				case "azure":
-					// tenant_id, client_id, auth_method, secret_key
-				case "gcp":
-					// email , secret_key
-				default:
-					fLogger.error("[Vault] INFO - CredentialResolver - invalid credential type found.");
-					break;
+			if ("azure".equals(credType)) {
+				// tenant_id, client_id, auth_method, secret_key, certificate, cert_passphrase, cert_alias
+				final String prefix = "mid.ct.ext.cred.resolver.";
+				result.put(AZURE_TENANT_ID_ATTR_NAME,
+						Config.get().getProperty(prefix + AZURE_TENANT_ID_ATTR_NAME));
+				result.put(AZURE_CLIENT_ID_ATTR_NAME,
+						Config.get().getProperty(prefix + AZURE_CLIENT_ID_ATTR_NAME));
+				result.put(ATTR_NAME_AZURE_AUTH_METHOD,
+						Config.get().getProperty(prefix + ATTR_NAME_AZURE_AUTH_METHOD));
+				result.put(AWS_SECRET_KEY__ATTR_NAME,
+						Config.get().getProperty(prefix + AWS_SECRET_KEY__ATTR_NAME));
+				result.put(AZURE_CERTIFICATE_ATTR_NAME,
+						Config.get().getProperty(prefix + AZURE_CERTIFICATE_ATTR_NAME));
+				result.put(AZURE_CERTIFICATE_PASSPHRASE_ATTR_NAME,
+						Config.get().getProperty(prefix + AZURE_CERTIFICATE_PASSPHRASE_ATTR_NAME));
+				result.put(AZURE_CERTIFICATE_ALIAS_ATTR_NAME,
+						Config.get().getProperty(prefix + AZURE_CERTIFICATE_ALIAS_ATTR_NAME));
+			} else {
+				fLogger.error("[Vault] INFO - CredentialResolver - invalid credential type found.");
 			}
 		} catch (Exception e) {
 			// Catch block
 			fLogger.error("### Unable to find credential from CyberArk server.", e);
 		}
-		// the resolved credential is returned in a HashMap...
-		Map<String, String> result = new HashMap<>();
-		result.put(VAL_USER, username);
-		if (isNullOrEmpty(private_key)) {
-			result.put(VAL_PSWD, password);
-		} else {
-			result.put(VAL_PKEY, private_key);
-		}
+
 		return result;
 	}
-
-	public PSDKPassword getCred(String appId,
-	                            String credId,
-	                            String safeName,
-	                            String safeFolder,
-	                            String policyId,
-	                            String safeTimeout) throws PSDKException {
-		try {
-			PSDKPasswordRequest fRequest = new PSDKPasswordRequest();
-			// Format the query for CyberArk
-			fRequest.setAppID(appId);
-
-			// Set the timeout to the value defined above, or, the default if not valid
-			fRequest.setConnectionTimeout(safeTimeout);
-
-			fRequest.setQueryFormat(PasswordQueryFormat.EXACT);
-
-			String query = formatObjQuery(credId, safeName, safeFolder, policyId);
-			fRequest.setQuery(query);
-			return PasswordSDK.getPassword(fRequest); // Either works or throws an exception
-		} catch (PSDKException ex) {
-			// Ignore it, the password will be null and the exception will be handled below
-			throw new RuntimeException("The specified credential '" + credId + "' does not exist in the specified vault.", ex);
-		}
-
-	}
-
 
 	private String formatObjQuery(String credId, String safeName, String safeFolder, String policyId) {
 		return "safe=" + safeName + ";folder=" + safeFolder + ";object=" + credId +
@@ -295,23 +221,6 @@ public class CredentialResolver implements IExternalCredential {
 			return false;
 		}
 		return true;
-	}
-
-	// main method to test cyberark on dev machine where cyberark-AIM is installed.
-	// provide cyberark vault details and test it.
-	// TODO: Remove this before moving to production
-	public static void main(String[] args) {
-		CredentialResolver credResolver = new CredentialResolver();
-		// credResolver.loadProps();
-		credResolver.safeFolder = "root";
-		credResolver.safeName = "test-safe";
-
-		Map<String, String> map = new HashMap<>();
-		map.put(ARG_ID, "azure-cert-test-credentials");
-		map.put(ARG_TYPE, "azure");
-
-		Map<String, String> result = credResolver.resolve(map);
-		fLogger.info(result.toString());
 	}
 
 }
